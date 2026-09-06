@@ -18,7 +18,6 @@ workflows:
           mkdir -p Payload
           cp -r Runner.app Payload/
           zip -r Arkive.ipa Payload
-          mv Arkive.ipa $CM_BUILD_DIR/Arkive.ipa
+          cp Arkive.ipa "$CM_BUILD_DIR/Arkive.ipa"
     artifacts:
-      - $CM_BUILD_DIR/Arkive.ipa
-      - build/ios/iphoneos/Arkive.ipa
+      - Arkive.ipa
