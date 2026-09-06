@@ -27,7 +27,7 @@ class DatabaseHelper {
 
     return openDatabase(
       databasePath,
-      version: 1,
+      version: 2,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE documents (
@@ -40,6 +40,22 @@ class DatabaseHelper {
             createdAt TEXT NOT NULL
           )
         ''');
+        await database.execute('''
+          CREATE TABLE custom_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL COLLATE NOCASE UNIQUE
+          )
+        ''');
+      },
+      onUpgrade: (database, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await database.execute('''
+            CREATE TABLE custom_categories (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL COLLATE NOCASE UNIQUE
+            )
+          ''');
+        }
       },
     );
   }
@@ -58,13 +74,13 @@ class DatabaseHelper {
     final whereArguments = <String>[];
 
     if (query.trim().isNotEmpty) {
-      whereClauses.add('(title LIKE ? OR category LIKE ?)');
+      whereClauses.add('LOWER(title) LIKE LOWER(?)');
       final searchPattern = '%${query.trim()}%';
-      whereArguments.addAll([searchPattern, searchPattern]);
+      whereArguments.add(searchPattern);
     }
 
     if (category.trim().isNotEmpty) {
-      whereClauses.add('category = ?');
+      whereClauses.add('LOWER(category) = LOWER(?)');
       whereArguments.add(category.trim());
     }
 
@@ -74,6 +90,34 @@ class DatabaseHelper {
       whereArgs: whereArguments.isEmpty ? null : whereArguments,
       orderBy: 'createdAt DESC',
     );
+  }
+
+  Future<List<String>> getCustomCategories() async {
+    final database = await this.database;
+    final rows = await database.query(
+      'custom_categories',
+      columns: ['name'],
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+    return rows.map((row) => row['name']! as String).toList();
+  }
+
+  Future<bool> addCustomCategory(String name) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      return false;
+    }
+
+    final database = await this.database;
+    try {
+      await database.insert('custom_categories', {'name': normalizedName});
+      return true;
+    } on DatabaseException catch (error) {
+      if (error.isUniqueConstraintError()) {
+        return false;
+      }
+      rethrow;
+    }
   }
 
   Future<int> deleteDocument(int id, String filePath) async {

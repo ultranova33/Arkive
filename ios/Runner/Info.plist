@@ -25,7 +25,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is required by Arkive to scan land documents locally.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Required to save or export document scans locally.</string>
+	<string>Required to save document scans locally.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -5,7 +5,6 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:share_plus/share_plus.dart';
 
 class DocumentService {
   static const MethodChannel _storageChannel = MethodChannel(
@@ -50,15 +49,6 @@ class DocumentService {
     await outputFile.writeAsBytes(await document.save(), flush: true);
     await _excludeFromBackup(outputPath);
     return outputPath;
-  }
-
-  Future<ShareResult> exportDocument(String filePath) async {
-    final file = File(filePath);
-    if (!await file.exists()) {
-      throw FileSystemException('Document does not exist.', filePath);
-    }
-
-    return Share.shareXFiles([XFile(filePath)]);
   }
 
   Future<void> _excludeFromBackup(String filePath) async {

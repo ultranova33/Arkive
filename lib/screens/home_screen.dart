@@ -23,8 +23,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const List<String> _categories = [
-    'All',
+  static const List<String> _builtInCategories = [
     'Land Deeds',
     'Property Tax',
     'Identity',
@@ -36,14 +35,16 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   List<Map<String, dynamic>> _documents = [];
+  List<String> _customCategories = [];
   String _selectedCategory = 'All';
   bool _isLoading = true;
   bool _isScanning = false;
+  int _loadRequestId = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadDocuments();
+    _loadData();
   }
 
   @override
@@ -52,12 +53,33 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  List<String> get _categories => [
+    'All',
+    ..._builtInCategories,
+    ..._customCategories,
+  ];
+
+  Future<void> _loadData() async {
+    await _loadCategories();
+    await _loadDocuments();
+  }
+
+  Future<void> _loadCategories() async {
+    final customCategories = await _database.getCustomCategories();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _customCategories = customCategories);
+  }
+
   Future<void> _loadDocuments() async {
+    final requestId = ++_loadRequestId;
     final documents = await _database.getAllDocuments(
-      query: _searchController.text,
+      query: _searchController.text.trim(),
       category: _selectedCategory == 'All' ? '' : _selectedCategory,
     );
-    if (!mounted) {
+    if (!mounted || requestId != _loadRequestId) {
       return;
     }
 
@@ -112,7 +134,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<_DocumentDetails?> _showDocumentDetails() async {
     final titleController = TextEditingController();
-    var category = _categories[1];
+    var category = _categories.firstWhere(
+      (item) => item != 'All',
+      orElse: () => _builtInCategories.first,
+    );
 
     final details = await showModalBottomSheet<_DocumentDetails>(
       context: context,
@@ -151,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     prefixIcon: Icon(Icons.folder_outlined),
                   ),
                   items: _categories
-                      .skip(1)
+                      .where((item) => item != 'All')
                       .map(
                         (item) =>
                             DropdownMenuItem(value: item, child: Text(item)),
@@ -192,6 +217,74 @@ class _HomeScreenState extends State<HomeScreen> {
     return details;
   }
 
+  Future<void> _addCategory() async {
+    final controller = TextEditingController();
+    final categoryName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add category'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          maxLength: 40,
+          decoration: const InputDecoration(
+            labelText: 'Category name',
+            hintText: 'e.g. Insurance',
+          ),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    final normalizedName = categoryName?.trim() ?? '';
+    if (!mounted || normalizedName.isEmpty) {
+      return;
+    }
+
+    final alreadyExists = _categories.any(
+      (category) => category.toLowerCase() == normalizedName.toLowerCase(),
+    );
+    if (alreadyExists) {
+      _showMessage(
+        'That category already exists or matches a built-in category.',
+        isError: true,
+      );
+      return;
+    }
+
+    try {
+      final added = await _database.addCustomCategory(normalizedName);
+      if (!mounted) {
+        return;
+      }
+      if (!added) {
+        _showMessage(
+          'That category already exists or matches a built-in category.',
+          isError: true,
+        );
+        return;
+      }
+
+      await _loadCategories();
+      setState(() => _selectedCategory = normalizedName);
+      await _loadDocuments();
+    } on Object catch (error) {
+      _showMessage('Unable to add category: $error', isError: true);
+    }
+  }
+
   Future<void> _deleteDocument(Map<String, dynamic> document) async {
     final title = document['title'] as String? ?? 'this document';
     final shouldDelete = await showDialog<bool>(
@@ -224,14 +317,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _showMessage('Document deleted.');
     } on Object catch (error) {
       _showMessage('Unable to delete document: $error', isError: true);
-    }
-  }
-
-  Future<void> _exportDocument(String filePath) async {
-    try {
-      await _documentService.exportDocument(filePath);
-    } on Object catch (error) {
-      _showMessage('Unable to export document: $error', isError: true);
     }
   }
 
@@ -315,13 +400,20 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             SizedBox(
-              height: 46,
+              height: 52,
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 scrollDirection: Axis.horizontal,
-                itemCount: _categories.length,
+                itemCount: _categories.length + 1,
                 separatorBuilder: (_, index) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
+                  if (index == _categories.length) {
+                    return ActionChip(
+                      avatar: const Icon(Icons.add, size: 17),
+                      label: const Text('Add category'),
+                      onPressed: _addCategory,
+                    );
+                  }
                   final category = _categories[index];
                   final selected = category == _selectedCategory;
                   return FilterChip(
@@ -377,8 +469,6 @@ class _HomeScreenState extends State<HomeScreen> {
           document: _documents[index],
           formattedDate: _formatDate(_documents[index]['createdAt'] as String?),
           onTap: () => _openDocument(_documents[index]),
-          onExport: () =>
-              _exportDocument(_documents[index]['filePath'] as String),
           onDelete: () => _deleteDocument(_documents[index]),
         ),
       ),
@@ -398,14 +488,12 @@ class _DocumentCard extends StatelessWidget {
     required this.document,
     required this.formattedDate,
     required this.onTap,
-    required this.onExport,
     required this.onDelete,
   });
 
   final Map<String, dynamic> document;
   final String formattedDate;
   final VoidCallback onTap;
-  final VoidCallback onExport;
   final VoidCallback onDelete;
 
   @override
@@ -476,11 +564,6 @@ class _DocumentCard extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    onPressed: onExport,
-                    tooltip: 'Export document',
-                    icon: const Icon(Icons.ios_share_outlined),
-                  ),
                   IconButton(
                     onPressed: onDelete,
                     tooltip: 'Delete document',
