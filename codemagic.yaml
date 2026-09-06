@@ -13,6 +13,7 @@ workflows:
           flutter pub get
       - name: Build Unsigned iOS Release IPA
         script: |
+          set -euo pipefail
           flutter build ios --release --no-codesign
           cd build/ios/iphoneos
           mkdir -p Payload

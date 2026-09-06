@@ -38,7 +38,8 @@ import UIKit
       do {
         var resourceValues = URLResourceValues()
         resourceValues.isExcludedFromBackup = true
-        try URL(fileURLWithPath: filePath).setResourceValues(resourceValues)
+        var fileURL = URL(fileURLWithPath: filePath)
+        try fileURL.setResourceValues(resourceValues)
         result(true)
       } catch {
         result(FlutterError(
