@@ -1,0 +1,22 @@
+workflows:
+  ios-build:
+    name: iOS Unsigned IPA Build
+    instance_type: mac_mini_m1
+    max_build_duration: 30
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Set up Flutter dependencies
+        script: |
+          flutter pub get
+      - name: Build Unsigned iOS Release IPA
+        script: |
+          flutter build ios --release --no-codesign
+          cd build/ios/iphoneos
+          mkdir Payload
+          mv Runner.app Payload
+          zip -r Arkive.ipa Payload
+    artifacts:
+      - build/ios/iphoneos/Arkive.ipa
