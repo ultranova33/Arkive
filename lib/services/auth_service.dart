@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:local_auth/local_auth.dart';
 
@@ -29,7 +28,7 @@ class AuthService extends ChangeNotifier with WidgetsBindingObserver {
 
       _setLocked(!authenticated);
       return authenticated;
-    } on PlatformException {
+    } on Exception {
       _setLocked(true);
       return false;
     }
